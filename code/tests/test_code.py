@@ -388,5 +388,61 @@ class TestEndToEnd(unittest.TestCase):
         self.assertLess(loss.item(), 0.1)
 
 
+class TestAutoSelection(unittest.TestCase):
+    """Chọn tự động chỉ dựa trên val: backbone, công thức, suy luận."""
+
+    @staticmethod
+    def _runs(rows):
+        return pd.DataFrame([{"exp_id": e, "seed": s, "backbone": b, "val_macro_f1": f} for e, s, b, f in rows])
+
+    def test_select_backbone_with_latency_limit(self):
+        runs = self._runs([("B01", 0, "resnet50", 0.90), ("B06", 0, "efficientnet_b0", 0.88),
+                           ("B03", 0, "convnext_tiny", 0.93)])
+        lat = {"resnet50": {"p50": 12.0}, "efficientnet_b0": {"p50": 8.0}, "convnext_tiny": {"p50": 20.0}}
+        self.assertEqual(EX.select_backbone(runs, lat), "convnext_tiny")
+        self.assertEqual(EX.select_backbone(runs, lat, max_lat_ms=15), "resnet50")
+        with self.assertRaises(ValueError):
+            EX.select_backbone(runs, lat, max_lat_ms=1)
+
+    def test_recipe_selection_uses_noise_threshold(self):
+        base = EX.baseline_config("resnet18", seed=0)
+        abl = EX.training_ablations("resnet18", seed=0)
+        rows = [("T00", 0, "resnet18", 0.900), ("T00", 1, "resnet18", 0.902), ("T00", 2, "resnet18", 0.898),
+                ("T05", 0, "resnet18", 0.930),   # cutmix: thắng rõ
+                ("T06", 0, "resnet18", 0.915),   # mixup thắng nhưng kém cutmix -> cùng nhóm "mix", không chọn
+                ("T07", 0, "resnet18", 0.9005),  # label smoothing: trong nhiễu -> bỏ
+                ("T12", 0, "resnet18", 0.912),   # EMA: thắng vượt nhiễu (2·std = 0.004)
+                ("T13", 0, "resnet18", 0.99)]    # độ phân giải 256 không bao giờ đưa vào kết hợp
+        runs = self._runs(rows)
+        self.assertAlmostEqual(EX.noise_threshold(runs), 0.004, places=6)
+        combo, notes = EX.select_recipe(runs, abl, base)
+        self.assertEqual(combo, {"mix": "cutmix", "ema_decay": 0.999})
+        self.assertEqual(len(notes), len(EX.RECIPE_GROUPS))
+        # T14 chưa chạy: chọn yếu tố đơn tốt nhất (T05); T13 bị loại dù F1 cao nhất
+        self.assertEqual(EX.choose_final(runs), "T05")
+        runs2 = pd.concat([runs, self._runs([("T14", 0, "resnet18", 0.94)])])
+        self.assertEqual(EX.choose_final(runs2), "T14")
+        runs3 = pd.concat([runs, self._runs([("T14", 0, "resnet18", 0.901)])])
+        self.assertEqual(EX.choose_final(runs3), "T05")
+        self.assertEqual(EX.choose_final(self._runs(rows[:3])), "T00")      # không có gì vượt nhiễu
+
+    def test_combo_config_is_buildable_and_final_kwargs(self):
+        cfg = TR.Config(exp_id="T14", seed=0, backbone="resnet18", mix="cutmix", ema_decay=0.999,
+                        images_dir="x", out_dir="o")
+        kw = EX.final_kwargs(cfg)
+        for k in ("exp_id", "seed", "images_dir", "out_dir", "save_test_predictions"):
+            self.assertNotIn(k, kw)
+        f = TR.Config(exp_id="F01", seed=2, images_dir="x", **kw)
+        self.assertEqual((f.mix, f.ema_decay, f.backbone), ("cutmix", 0.999, "resnet18"))
+
+    def test_select_inference_prefers_cheap_unless_clear_gain(self):
+        def df(i00, i01, i03, i02a):
+            return pd.DataFrame({"exp_id": ["I00", "I01", "I03", "I02a", "I07", "I04_288"],
+                                 "val_macro_f1": [i00, i01, i03, i02a, 0.99, 0.99]})
+        self.assertEqual(EX.select_inference(df(0.90, 0.9005, 0.901, 0.9015)), ("none", "prob", "I00"))
+        self.assertEqual(EX.select_inference(df(0.90, 0.91, 0.915, 0.905)), ("hflip", "logit", "I03"))
+        self.assertEqual(EX.select_inference(df(0.90, 0.91, 0.905, 0.92)), ("crop5", "prob", "I02a"))
+
+
 if __name__ == "__main__":
     unittest.main()

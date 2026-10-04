@@ -36,6 +36,16 @@
 6. **Chạy tiếp ở phiên sau:** notebook → Add Input → Your Work/Notebook Output → chọn notebook cũ; đặt
    `PREV_OUTPUT_DIR = "/kaggle/input/<tên-notebook-cũ>"`. Ô 0.2 sẽ chép `runs/`, `predictions/`, `curves/` về, run nào xong sẽ được bỏ qua.
 
+## Chạy một phát (tự chọn trên val)
+
+Mặc định `RUN_UP_TO = 5`: notebook chạy từ Bước 0 đến Bước 5 và **tự chọn chỉ dựa trên val**:
+- Backbone: macro-F1 val cao nhất (tuỳ chọn `MAX_LAT_MS` để giới hạn độ trễ).
+- Công thức: mỗi nhóm (aug, mix, loss, sampler, lr, ema) lấy yếu tố thắng T00 vượt 2·std của T00, gộp thành T14;
+  chung kết dùng T14 nếu vượt T00 quá ngưỡng nhiễu, nếu không thì yếu tố đơn tốt nhất vượt ngưỡng, nếu không có thì T00.
+- Suy luận: phương pháp có macro-F1 val cao nhất trong I00/I01/I02/I03; nếu hơn I00 không quá 0.002 thì giữ I00. Luôn temperature scaling (T khớp trên val).
+Test chỉ được chạy ở Bước 4, đúng một lần mỗi seed. Muốn chọn tay: đặt `BEST_BACKBONE`, `COMBO_OVERRIDES`, `AUTO_FINAL = False`.
+Hạn chế: chọn bằng 1 seed nên có thể chọn nhầm yếu tố nằm trong nhiễu; ghi rõ trong báo cáo.
+
 Không có git? Nén cả thư mục repo thành `lab.zip`, tải lên `MyDrive/lab_day2/lab.zip`, đặt `USE_GIT = False`.
 
 ## Chạy từ dòng lệnh

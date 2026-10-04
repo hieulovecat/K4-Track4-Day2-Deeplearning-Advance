@@ -82,6 +82,83 @@ def collect_runs(out_dir: str = "runs") -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+# --------------------------------------------------------------------------- #
+# Chọn cấu hình tự động - CHỈ dựa trên macro-F1 VAL (không bao giờ nhìn test)
+# --------------------------------------------------------------------------- #
+# Mỗi nhóm chỉ chọn tối đa một giá trị (mixup và cutmix không dùng cùng lúc, v.v.).
+# T13 (img 256) không đưa vào kết hợp vì code suy luận giả định đầu vào 224.
+RECIPE_GROUPS = {"aug": ["T03", "T04"], "mix": ["T05", "T06"], "loss": ["T07", "T08", "T09"],
+                 "sampler": ["T10"], "lr": ["T11"], "ema": ["T12"]}
+INFERENCE_METHODS = {"I00": ("none", "prob"), "I01": ("hflip", "prob"), "I03": ("hflip", "logit"),
+                     "I02a": ("crop5", "prob"), "I02b": ("crop10", "prob")}
+
+
+def select_backbone(runs: pd.DataFrame, latency: dict | None = None, max_lat_ms: float | None = None) -> str:
+    """Backbone có macro-F1 val cao nhất ở Bước 1; nếu max_lat_ms: chỉ xét backbone có p50 batch 1 <= ngưỡng."""
+    b = runs[runs.exp_id.str.startswith("B")]
+    if max_lat_ms is not None and latency:
+        b = b[b.backbone.map(lambda n: latency[n]["p50"]) <= max_lat_ms]
+    if b.empty:
+        raise ValueError("không có backbone nào thoả điều kiện độ trễ")
+    return b.sort_values("val_macro_f1", ascending=False).iloc[0].backbone
+
+
+def noise_threshold(runs: pd.DataFrame, k: float = 2.0, floor: float = 0.002) -> float:
+    """Ngưỡng nhiễu = k·std của T00 qua các seed (std mẫu); thiếu seed thì dùng 0.01."""
+    v = runs[runs.exp_id == "T00"].val_macro_f1
+    sd = v.std(ddof=1) if len(v) > 1 else float("nan")
+    return max(k * sd, floor) if sd == sd else 0.01
+
+
+def select_recipe(runs: pd.DataFrame, ablations: list, base: Config):
+    """Gộp, theo từng nhóm, giá trị thắng T00 (seed 0) vượt ngưỡng nhiễu. Trả về (overrides, ghi chú)."""
+    thr = noise_threshold(runs)
+    f1 = runs[runs.seed == 0].set_index("exp_id").val_macro_f1
+    base_d, notes, combo = dataclasses.asdict(base), [], {}
+    cfgs = {c.exp_id: c for c, _, _ in ablations}
+    for group, ids in RECIPE_GROUPS.items():
+        best = max((i for i in ids if i in f1 and i in cfgs and f1[i] - f1["T00"] > thr),
+                   key=lambda i: f1[i], default=None)
+        if best is None:
+            notes.append(f"{group}: không yếu tố nào vượt ngưỡng nhiễu {thr:.4f} -> giữ nền")
+            continue
+        ov = {k: v for k, v in dataclasses.asdict(cfgs[best]).items()
+              if k not in ("exp_id", "note") and v != base_d[k]}
+        combo.update(ov)
+        notes.append(f"{group}: chọn {best} (Δ={f1[best] - f1['T00']:+.4f} > {thr:.4f}) {ov}")
+    return combo, notes
+
+
+def choose_final(runs: pd.DataFrame) -> str:
+    """Cấu hình huấn luyện đi vào chung kết: T14 (kết hợp) nếu vượt T00 quá ngưỡng nhiễu; nếu không thì
+    yếu tố đơn tốt nhất vượt ngưỡng; nếu không có gì thì T00."""
+    thr = noise_threshold(runs)
+    f1 = runs[runs.seed == 0].set_index("exp_id").val_macro_f1
+    base = f1["T00"]
+    if "T14" in f1 and f1["T14"] > base + thr:
+        return "T14"
+    singles = {k: v for k, v in f1.items()
+               if k.startswith("T") and k not in ("T00", "T13", "T14") and v > base + thr}
+    return max(singles, key=singles.get) if singles else "T00"
+
+
+def select_inference(inf_df: pd.DataFrame, min_gain: float = 0.002):
+    """Phương pháp suy luận chung kết theo macro-F1 val; nếu hơn I00 không quá min_gain (≈ nhiễu) thì giữ
+    I00 (1 view, rẻ nhất). Trả về (views, agg, exp_id)."""
+    d = inf_df[inf_df.exp_id.isin(INFERENCE_METHODS)]
+    base = d.loc[d.exp_id == "I00", "val_macro_f1"].iloc[0]
+    best = d.sort_values("val_macro_f1", ascending=False).iloc[0]
+    eid = best.exp_id if best.val_macro_f1 - base > min_gain else "I00"
+    return (*INFERENCE_METHODS[eid], eid)
+
+
+def final_kwargs(cfg: Config) -> dict:
+    """Các field của một Config có thể đem làm cấu hình chung kết (bỏ id, seed, đường dẫn, cờ test)."""
+    skip = {"exp_id", "seed", "save_test_predictions", "images_dir", "labels_dir", "out_dir", "pred_dir",
+            "curves_dir", "num_workers"}
+    return {k: v for k, v in dataclasses.asdict(cfg).items() if k not in skip}
+
+
 def mean_std_table(df: pd.DataFrame, cols=("val_macro_f1", "val_top1")) -> pd.DataFrame:
     g = df.groupby("exp_id")[list(cols)].agg(["mean", "std", "count"])
     g.columns = ["_".join(c) for c in g.columns]
