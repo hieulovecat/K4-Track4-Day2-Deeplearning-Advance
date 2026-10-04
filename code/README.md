@@ -10,19 +10,31 @@
 | `benchmark.py` | độ trễ p50/p95/p99 (warmup, `synchronize`, ≥ 50 lần) |
 | `checks.py` | loss ban đầu ≈ ln 9, overfit 1 batch, xem ảnh sau augmentation |
 | `experiments.py` | danh sách B/T/I/F, nghiên cứu suy luận, ghi predictions chung kết, tạo `results.xlsx` |
-| `lab_day2_colab.ipynb` | **notebook chạy trên Colab** |
+| `lab_day2.ipynb` | **notebook chạy trên Colab hoặc Kaggle** (đổi `PLATFORM` ở ô 0) |
 | `tests/test_code.py` | 26 test chạy trên CPU (không cần mạng/dữ liệu) |
 
 `eval.py` nằm ở thư mục gốc repo, **không sửa**.
 
-## Chạy trên Google Colab
+## Chạy trên Google Colab (đặt `PLATFORM = "colab"`)
 
 1. Đưa code lên GitHub (từ máy bạn): `git add code && git commit -m "Hoàn thiện code" && git push`.
-2. Mở `code/lab_day2_colab.ipynb` trên Colab (File → Open notebook → GitHub, hoặc upload file). Chọn **Runtime → Change runtime type → T4 GPU**.
+2. Mở `code/lab_day2.ipynb` trên Colab (File → Open notebook → GitHub, hoặc upload file). Chọn **Runtime → Change runtime type → T4 GPU**.
 3. Chạy lần lượt từ trên xuống. Ô "Lấy code" cần `REPO_URL`; ô dữ liệu tự tải `images.zip` (kiểm MD5) và CSV fold 0.
    Nếu đã có `images.zip` trên Drive: `IMAGES_SOURCE = "drive"`.
 4. Các điểm **bạn phải tự quyết trên val** (trong notebook có ghi `<- ĐỔI`): `BEST_BACKBONE` (sau Bước 1), cấu hình kết hợp `COMBO`, `INF_SRC`, `FINAL_KW`, `VIEWS/AGG/TS` (sau Bước 2–3).
 5. Kết quả lưu ở `MyDrive/lab_day2/` (`runs/`, `predictions/`, `curves/`, `results.xlsx`). Nếu Colab ngắt, mở lại và chạy lại các ô: run nào xong sẽ được bỏ qua.
+
+## Chạy trên Kaggle (đặt `PLATFORM = "kaggle"`)
+
+1. Tải `code/lab_day2.ipynb` về máy (từ GitHub, nút Download raw file). Trên kaggle.com: **Create → New Notebook → File → Import Notebook** → chọn file.
+2. Panel phải **Settings**: Accelerator = **GPU T4 x2** (code chỉ dùng 1 GPU; tránh P100 vì không có tensor core cho AMP),
+   **Internet = On** (cần xác minh số điện thoại cho tài khoản; cần để `git clone`, `pip`, tải ảnh).
+3. Ô 0: `PLATFORM = "kaggle"`; để `IMAGES_SOURCE = "download"` (Zenodo) hoặc dùng dataset riêng (`"input"`, xem notebook).
+4. Chạy lần lượt như trên Colab. Kết quả ở `/kaggle/working/lab_day2/`.
+5. **Giữ kết quả:** `/kaggle/working` chỉ được lưu khi bạn **Save Version** (Save & Run All / Quick Save). Phiên tối đa 12 giờ,
+   hạn mức GPU khoảng 30 giờ/tuần (xem trong tài khoản). Làm từng bước rồi Save Version sau mỗi bước.
+6. **Chạy tiếp ở phiên sau:** notebook → Add Input → Your Work/Notebook Output → chọn notebook cũ; đặt
+   `PREV_OUTPUT_DIR = "/kaggle/input/<tên-notebook-cũ>"`. Ô 0.2 sẽ chép `runs/`, `predictions/`, `curves/` về, run nào xong sẽ được bỏ qua.
 
 Không có git? Nén cả thư mục repo thành `lab.zip`, tải lên `MyDrive/lab_day2/lab.zip`, đặt `USE_GIT = False`.
 
