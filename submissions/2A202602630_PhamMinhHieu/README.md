@@ -1,6 +1,6 @@
 # Lab Day 2 — DeepWeeds: backbone, công thức huấn luyện, suy luận
 
-**Sinh viên:** `<họ tên>` · **MSSV:** `<mssv>`
+**Sinh viên:** Phạm Minh Hiếu · **MSSV:** 2A202602630
 
 Bài nộp cho Lab Day 2 (Track 4): so sánh 7 backbone, 14 thí nghiệm công thức huấn luyện và 13 phương pháp suy luận trên DeepWeeds (fold 0), rồi chạy chung kết 3 seed.
 Kết quả chính (test, 3 seed, mean ± std): **top-1 0,9739 ± 0,0009, macro-F1 0,9699 ± 0,0014** (mốc công thức nền + 1 view: top-1 0,9737 ± 0,0030, macro-F1 0,9669 ± 0,0024). Chi tiết, phân tích và hạn chế trong [`report.md`](report.md).

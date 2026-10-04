@@ -1,6 +1,6 @@
 # Báo cáo Lab Day 2 — Backbone, công thức huấn luyện và suy luận trên DeepWeeds
 
-**Sinh viên:** `<họ tên>` · **MSSV:** `<mssv>` · **Nền tảng:** Kaggle, GPU Tesla T4 · **Dữ liệu:** DeepWeeds, fold 0 chia sẵn
+**Sinh viên:** Phạm Minh Hiếu · **MSSV:** 2A202602630 · **Nền tảng:** Kaggle, GPU Tesla T4 · **Dữ liệu:** DeepWeeds, fold 0 chia sẵn
 
 Mọi con số dưới đây lấy từ log chạy thật (`log.txt`), `results.xlsx` và các file trong `predictions/`; chỉ số test tính lại bằng `eval.py` gốc (không sửa). Số trích từ bài báo gốc được ghi rõ là *trích dẫn*.
 
